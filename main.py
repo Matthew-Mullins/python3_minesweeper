@@ -33,9 +33,15 @@ from tkinter import ttk
 from tkinter import font
 from tkinter.simpledialog import Dialog
 
+import random
+
 class Tile:
-    def __init__(self):
-        pass
+    def __init__(self, button, value=0):
+        self.button = button
+        self.value = value
+
+    def show_value(self, e=None):
+        self.button.configure(text=self.value)
 
 class SettingsDialog(Dialog):
     def __init__(self, master):
@@ -127,16 +133,12 @@ class SettingsDialog(Dialog):
 class Game(tk.Frame):
     def __init__(self, master):
         tk.Frame.__init__(self, master)
-        screen_w = master.winfo_screenwidth()
-        screen_h = master.winfo_screenheight()
-        offset_w = screen_w // 2
-        offset_h = screen_h // 2
         master.withdraw()
         self.create_settings_popup()
+        self.frame_body = None
+        self.playing = False
         self.create_gui()
-        window_w = master.winfo_reqwidth()
-        window_h = master.winfo_reqheight()
-        master.geometry('+{}+{}'.format(offset_w - window_w // 2, offset_h - window_h // 2))
+        self.initialize_grid()
         master.deiconify()
 
     def create_gui(self):
@@ -148,18 +150,62 @@ class Game(tk.Frame):
         frame_header.pack(side=tk.TOP, expand=tk.FALSE, fill=tk.X)
 
         self.time_var = tk.IntVar()
+        self.time_var.set('{:03d}'.format(0))
         label_time = tk.Label(frame_header, bg='black', font=('Courier', 16, 'bold'), fg='red', textvariable=self.time_var)
         label_time.pack(side=tk.LEFT, expand=tk.FALSE, fill=tk.Y)
 
-        button_reset = tk.Button(frame_header, command=print, font=('Courier', 16, 'bold'), text='RESET')
+        button_reset = tk.Button(frame_header, command=self.reset_grid, font=('Courier', 16, 'bold'), text='RESET')
         button_reset.pack(side=tk.LEFT, expand=tk.TRUE, fill=tk.Y)
 
         self.mines_var = tk.IntVar()
+        self.mines_var.set('{:03d}'.format(0))
         label_time = tk.Label(frame_header, bg='black', font=('Courier', 16, 'bold'), fg='red', textvariable=self.mines_var)
         label_time.pack(side=tk.RIGHT, expand=tk.FALSE, fill=tk.Y)
 
     def create_grid(self):
-        pass
+        width, height, mines = self.settings
+        self.grid = []
+
+        if not self.frame_body:
+            self.frame_body = tk.Frame(self.master, bd=2, relief='raised')
+            self.frame_body.pack(side=tk.TOP, expand=tk.TRUE, fill=tk.BOTH)
+
+        for col in range(width):
+            tiles = []
+            for row in range(height):
+                frame = tk.Frame(self.frame_body, width=20, height=20)
+                frame.propagate(tk.FALSE)
+                frame.grid(row=row, column=col)
+
+                button = tk.Button(frame)
+                button.pack(expand=tk.TRUE, fill=tk.BOTH)
+
+                tile = Tile(button)
+                tiles.append(tile)
+                tile.button.bind("<Button-3>", func=tile.show_value)
+            self.grid.append(tiles)
+
+    def initialize_grid(self):
+        width, height, mines = self.settings
+        available_tiles = [(x, y) for y in range(height) for x in range(width)]
+        self.mine_locations = []
+        for i in range(mines):
+            rand = random.randint(0, len(available_tiles) - 1)
+            self.mine_locations.append(available_tiles.pop(rand))
+
+        for location in self.mine_locations:
+            self.grid[location[0]][location[1]].value = -1
+        
+        # increase values of tiles surrounding -1's
+
+    def reset_grid(self):
+        self.master.withdraw()
+        self.create_settings_popup()
+        for child in self.frame_body.winfo_children():
+            child.destroy()
+        self.create_grid()
+        self.initialize_grid()
+        self.master.deiconify()
 
     def create_settings_popup(self):
         settings = SettingsDialog(self.master)
