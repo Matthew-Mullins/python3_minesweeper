@@ -43,6 +43,21 @@ class Tile:
     def show_value(self, e=None):
         self.button.configure(text=self.value)
 
+    def flag(self, e=None):
+        text = self.button['text']
+        if text == '':
+            self.button.configure(text='F')
+            return -1
+        elif text == 'F':
+            self.button.configure(text='?')
+            return 1
+        elif text == '?':
+            self.button.configure(text='')
+            return 0
+
+    def press(self):
+        self.button.configure(relief=tk.SUNKEN, state=tk.DISABLED)
+
 class SettingsDialog(Dialog):
     def __init__(self, master):
         Dialog.__init__(self, master, title='Game Settings')
@@ -58,7 +73,7 @@ class SettingsDialog(Dialog):
                 entry_grid_w.config(state=tk.DISABLED)
                 self.grid_h_var.set(difficulty_var.get() * 10)
                 entry_grid_h.config(state=tk.DISABLED)
-                self.mines_var.set(difficulty_var.get() * 10)
+                self.mines_var.set(difficulty_var.get() * difficulty_var.get() * 10)
                 entry_mines.config(state=tk.DISABLED)
 
         frame = tk.Frame(master, bd=2, relief=tk.RAISED)
@@ -133,13 +148,12 @@ class SettingsDialog(Dialog):
 class Game(tk.Frame):
     def __init__(self, master):
         tk.Frame.__init__(self, master)
-        master.withdraw()
         self.create_settings_popup()
         self.frame_body = None
         self.playing = False
+        self.mines_remaining = 0
         self.create_gui()
         self.initialize_grid()
-        master.deiconify()
 
     def create_gui(self):
         self.create_header()
@@ -149,7 +163,7 @@ class Game(tk.Frame):
         frame_header = tk.Frame(self.master, bd=2, relief='raised')
         frame_header.pack(side=tk.TOP, expand=tk.FALSE, fill=tk.X)
 
-        self.time_var = tk.IntVar()
+        self.time_var = tk.StringVar()
         self.time_var.set('{:03d}'.format(0))
         label_time = tk.Label(frame_header, bg='black', font=('Courier', 16, 'bold'), fg='red', textvariable=self.time_var)
         label_time.pack(side=tk.LEFT, expand=tk.FALSE, fill=tk.Y)
@@ -157,7 +171,7 @@ class Game(tk.Frame):
         button_reset = tk.Button(frame_header, command=self.reset_grid, font=('Courier', 16, 'bold'), text='RESET')
         button_reset.pack(side=tk.LEFT, expand=tk.TRUE, fill=tk.Y)
 
-        self.mines_var = tk.IntVar()
+        self.mines_var = tk.StringVar()
         self.mines_var.set('{:03d}'.format(0))
         label_time = tk.Label(frame_header, bg='black', font=('Courier', 16, 'bold'), fg='red', textvariable=self.mines_var)
         label_time.pack(side=tk.RIGHT, expand=tk.FALSE, fill=tk.Y)
@@ -165,6 +179,7 @@ class Game(tk.Frame):
     def create_grid(self):
         width, height, mines = self.settings
         self.grid = []
+        self.update_mines(mines)
 
         if not self.frame_body:
             self.frame_body = tk.Frame(self.master, bd=2, relief='raised')
@@ -177,12 +192,12 @@ class Game(tk.Frame):
                 frame.propagate(tk.FALSE)
                 frame.grid(row=row, column=col)
 
-                button = tk.Button(frame)
+                button = tk.Button(frame, command=lambda row=row, col=col: self.explore_tile(row, col))
                 button.pack(expand=tk.TRUE, fill=tk.BOTH)
 
                 tile = Tile(button)
                 tiles.append(tile)
-                tile.button.bind("<Button-3>", func=tile.show_value)
+                tile.button.bind("<Button-3>", func=lambda e, col=col, row=row: self.flag(e, col, row))
             self.grid.append(tiles)
 
     def initialize_grid(self):
@@ -201,7 +216,6 @@ class Game(tk.Frame):
                 if not 0 <= y < len(self.grid):
                     continue
                 for x in range(mine[0] - 1, mine[0] + 2):
-                    print(x, y)
                     if not 0 <= x < len(self.grid[0]):
                         continue
                     if (x, y) == mine:
@@ -222,6 +236,41 @@ class Game(tk.Frame):
         settings = SettingsDialog(self.master)
         self.settings = settings.result
 
+    def flag(self, e, x, y):
+        tile = self.grid[x][y]
+        change = tile.flag()
+        self.update_mines(change)
+
+    def update_mines(self, diff):
+        cur = self.mines_remaining
+        new = cur + diff
+        self.mines_remaining = new
+        self.mines_var.set('{:03d}'.format(self.mines_remaining))
+
+    def explore_tile(self, y, x):
+        tile = self.grid[x][y]
+        # If mine
+        if tile.value == -1:
+            tile.button.configure(bg='red')
+            tile.press()
+        if tile.value == 0:
+            for _y in range(y - 1, y + 2):
+                if not 0 <= _y < len(self.grid):
+                    continue
+                for _x in range(x - 1, x + 2):
+                    if not 0 <= _x < len(self.grid[0]):
+                        continue
+                    _tile = self.grid[_x][_y]
+                    if _tile.value == 0 and _tile.button['state'] != tk.DISABLED:
+                        _tile.press()
+                        self.explore_tile(_y, _x)
+                    elif _tile.button['state'] != tk.DISABLED:
+                        _tile.press()
+                        _tile.show_value()
+        else:
+            tile.press()
+            tile.show_value()
+
     def play(self):
         while True:
             self.master.update()
@@ -230,7 +279,9 @@ class Game(tk.Frame):
 def main():
     root = tk.Tk()
     root.title('Python 3 Minesweeper')
+    root.withdraw()
     game = Game(root)
+    root.deiconify()
     game.play()
     root.mainloop()
 
