@@ -196,7 +196,18 @@ class Game(tk.Frame):
         for location in self.mine_locations:
             self.grid[location[0]][location[1]].value = -1
         
-        # increase values of tiles surrounding -1's
+        for mine in self.mine_locations:
+            for y in range(mine[1] - 1, mine[1] + 2):
+                if not 0 <= y < len(self.grid):
+                    continue
+                for x in range(mine[0] - 1, mine[0] + 2):
+                    print(x, y)
+                    if not 0 <= x < len(self.grid[0]):
+                        continue
+                    if (x, y) == mine:
+                        continue
+                    if self.grid[x][y].value != -1:
+                        self.grid[x][y].value += 1
 
     def reset_grid(self):
         self.master.withdraw()
