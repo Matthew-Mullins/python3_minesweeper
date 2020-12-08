@@ -34,14 +34,28 @@ from tkinter import font
 from tkinter.simpledialog import Dialog
 
 import random
+import time
 
 class Tile:
+    colors = [
+        None,
+        'blue',
+        'green',
+        'red',
+        'navy',
+        'brown',
+        'turquoise',
+        'black',
+        'gray'
+    ]
+
     def __init__(self, button, value=0):
         self.button = button
         self.value = value
+        self.pressed = False
 
     def show_value(self, e=None):
-        self.button.configure(text=self.value)
+        self.button.configure(text=self.value, fg=Tile.colors[self.value])
 
     def flag(self, e=None):
         text = self.button['text']
@@ -56,7 +70,10 @@ class Tile:
             return 0
 
     def press(self):
-        self.button.configure(relief=tk.SUNKEN, state=tk.DISABLED)
+        if self.pressed:
+            return
+        self.button.configure(relief=tk.SUNKEN)
+        self.pressed = True
 
 class SettingsDialog(Dialog):
     def __init__(self, master):
@@ -151,7 +168,10 @@ class Game(tk.Frame):
         self.create_settings_popup()
         self.frame_body = None
         self.playing = False
+        self.time_elapsed = 0
         self.mines_remaining = 0
+        self.flagged_tiles = set()
+        self.mine_locations = set()
         self.create_gui()
         self.initialize_grid()
 
@@ -179,6 +199,7 @@ class Game(tk.Frame):
     def create_grid(self):
         width, height, mines = self.settings
         self.grid = []
+        self.mines_remaining = 0
         self.update_mines(mines)
 
         if not self.frame_body:
@@ -203,10 +224,11 @@ class Game(tk.Frame):
     def initialize_grid(self):
         width, height, mines = self.settings
         available_tiles = [(x, y) for y in range(height) for x in range(width)]
-        self.mine_locations = []
+        self.mine_locations = set()
+        self.flagged_tiles = set()
         for i in range(mines):
             rand = random.randint(0, len(available_tiles) - 1)
-            self.mine_locations.append(available_tiles.pop(rand))
+            self.mine_locations.add(available_tiles.pop(rand))
 
         for location in self.mine_locations:
             self.grid[location[0]][location[1]].value = -1
@@ -225,6 +247,9 @@ class Game(tk.Frame):
 
     def reset_grid(self):
         self.master.withdraw()
+        self.playing = False
+        self.time_elapsed = 0
+        self.time_var.set('{:03.0f}'.format(0))
         self.create_settings_popup()
         for child in self.frame_body.winfo_children():
             child.destroy()
@@ -239,7 +264,12 @@ class Game(tk.Frame):
     def flag(self, e, x, y):
         tile = self.grid[x][y]
         change = tile.flag()
+        if (x, y) not in self.flagged_tiles and change == -1:
+            self.flagged_tiles.add((x, y))
+        elif (x, y) in self.flagged_tiles and change != -1:
+            self.flagged_tiles.remove((x, y))
         self.update_mines(change)
+        self.check_win()
 
     def update_mines(self, diff):
         cur = self.mines_remaining
@@ -247,12 +277,29 @@ class Game(tk.Frame):
         self.mines_remaining = new
         self.mines_var.set('{:03d}'.format(self.mines_remaining))
 
+    def check_win(self):
+        if self.flagged_tiles == self.mine_locations and self.mines_remaining == 0:
+            answer = tk.messagebox.askyesno('Congratulations!', 'You won in {:.2f} seconds!\nWould you like to play again?'.format(self.time_elapsed))
+            if answer:
+                self.reset_grid()
+            else:
+                self.master.destroy()
+
     def explore_tile(self, y, x):
+        if not self.playing:
+            self.playing = True
         tile = self.grid[x][y]
         # If mine
         if tile.value == -1:
             tile.button.configure(bg='red')
             tile.press()
+            answer = tk.messagebox.askyesno('Game Over', 'You know, if you wanted to paint the walls red, you could have just said so...\nTry again?')
+            if answer:
+                self.reset_grid()
+            else:
+                self.master.destroy()
+        if tile.button['text'] == 'F' or tile.button['text'] == '?':
+            return
         if tile.value == 0:
             for _y in range(y - 1, y + 2):
                 if not 0 <= _y < len(self.grid):
@@ -261,18 +308,28 @@ class Game(tk.Frame):
                     if not 0 <= _x < len(self.grid[0]):
                         continue
                     _tile = self.grid[_x][_y]
-                    if _tile.value == 0 and _tile.button['state'] != tk.DISABLED:
+                    if _tile.button['text'] == 'F' or _tile.button['text'] == '?':
+                        continue
+                    if _tile.value == 0 and not _tile.pressed:
                         _tile.press()
                         self.explore_tile(_y, _x)
-                    elif _tile.button['state'] != tk.DISABLED:
+                    elif not _tile.pressed:
                         _tile.press()
                         _tile.show_value()
         else:
+            if tile.button['text'] == 'F' or tile.button['text'] == '?':
+                return
             tile.press()
             tile.show_value()
 
     def play(self):
+        start_time = 0
         while True:
+            if self.playing:
+                self.time_elapsed = time.time() - start_time
+                self.time_var.set('{:03.0f}'.format(self.time_elapsed))
+            else:
+                start_time = time.time()
             self.master.update()
             self.master.update_idletasks()
 
